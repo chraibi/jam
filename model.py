@@ -1,11 +1,9 @@
 #!/usr/bin/python
 # -------------------------------------------------------------
 # from numpy import *
-import numpy as np
 # import os
 import logging
 import time
-import sys
 from utils import *
 
 # ---------------------- Parameter ---------------------------------------
@@ -72,7 +70,7 @@ def model(t, state):
 
 
 # ======================================================
-def simulation(N, dt, t_end, state, once, Length, f):
+def simulation(N, dt, t_end, state, once, f):
     t = 0
     frame = 0
     iframe = 0
