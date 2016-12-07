@@ -141,7 +141,7 @@ if __name__ == "__main__":
     print('filename %s' % filename)
     t1 = time.clock()
     ######################################################
-    simulation(N_ped, dt, t_end, state, once, Length, f)
+    simulation(N_ped, dt, t_end, state, once, f)
     ######################################################
     # a = anim.animate_solution(u, peds, targets)
     t2 = time.clock()
