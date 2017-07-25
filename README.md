@@ -1,6 +1,3 @@
-<script type="text/javascript" async
-  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
-</script>
 
 # Model description 
 
@@ -46,9 +43,9 @@ Note: Run in a separate window `tail -f log.txt` to display an updated content o
 
 # Plot trajectories 
 
-After successfully running the above script, two file should be produced: 
+After successfully running the above script, two files should be produced: 
 
-- trajectory file
+- a trajectory file
 - and a log file
 
 Using the trajectory file we can produce a `(x,t)` diagram as follows: 
@@ -81,7 +78,7 @@ which produces this figure
 
 # Requirements 
 
-For plotting  the following python packages are needed
+For plotting the following python packages are needed
 
 - `matplotlib`
 - `numpy`
