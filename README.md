@@ -5,7 +5,11 @@ This is a 1D model continuous in space which has the goal to reproduce stop-and-
 
 ![scenario](data/cor.png)
 
-Model description is in this [article](data/article.pdf).
+Model description is in this [article](data/article.pdf) [DOI](https://doi.org/10.1007/978-3-319-33482-0_22).
+```
+Chraibi, M., Tordeux, A., Schadschneider, A. (2016). A Force-Based Model to Reproduce Stop-and-Go Waves in Pedestrian Dynamics. In: Knoop, V., Daamen, W. (eds) Traffic and Granular Flow '15. Springer, Cham. https://doi.org/10.1007/978-3-319-33482-0_22
+```
+
 
 Model parameters are: 
 
@@ -25,8 +29,28 @@ After performing a simplified stability analysis on the model in 1D we find the 
 
 which indicates for which values of the tuple `(v_0,a_v)` we can expect having stop-and-go waves.
 
+## Requirements 
 
-# Run simulation 
+The following python packages are needed
+
+- `matplotlib`
+- `numpy`
+- (optional) `pandas`: for faster loading of the trajectory files.
+
+It recommended to use a virtual environment before installing:
+
+```
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+To install the required libraries run:
+
+```
+pip install -r requirements.txt
+```
+
+## Run simulation 
 
 ```
 python model.py 
@@ -41,7 +65,7 @@ The following values are used
 
 Note: Run in a separate window `tail -f log.txt` to display an updated content of the log file.
 
-# Plot trajectories 
+## Plot trajectories 
 
 After successfully running the above script, two files should be produced: 
 
@@ -60,7 +84,7 @@ The following trajectories are then produced
 
 ![traj.png](data/traj_133_av0.00_v01.00.png)
 
-# Plot the variation of the velocity
+## Plot the variation of the velocity
 
 The second file that is produced upon a successful simulation is a log file with some useful speed information (default file name is `log.txt`).
 
@@ -73,13 +97,3 @@ python plot_velocity_std.py
 which produces this figure
 
 ![velocity](data/std_log.png)
-
-
-
-# Requirements 
-
-For plotting the following python packages are needed
-
-- `matplotlib`
-- `numpy`
-- (optional) `pandas`: for faster loading of the trajectory files.
