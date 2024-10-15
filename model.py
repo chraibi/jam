@@ -44,12 +44,12 @@ def model(t, state):
     """
     x_n, x_m, dx_n, dx_m, dist = get_state_vars(state)
     if (x_n != np.sort(x_n)).any():  # check if pedestrians are swaping positions
-        swapping = (x_n != np.sort(x_n))  # swapping is True if there is some swapping
+        swapping = x_n != np.sort(x_n)  # swapping is True if there is some swapping
         swaped_dist = x_n[swapping]
         swaped_ped = [i for i, v in enumerate(swapping) if v == True]
 
-        print('swaped_peds'.format(swaped_ped))
-        print('distances '.format(swaped_dist))
+        print("swaped_peds".format(swaped_ped))
+        print("distances ".format(swaped_dist))
         return state, 0
 
     f_drv = (v0 - dx_n) / tau
@@ -78,8 +78,17 @@ def simulation(N, dt, t_end, state, once, f):
     np.savetxt(f, [], header="id\t time\t x\t v")
     while t <= t_end:
         if frame % (1 / (dt * fps)) == 0:
-            logging.info("time=%6.1f (<= %4d) frame=%3.3E v=%f  vmin=%f  std=+-%f" % (
-                t, t_end, frame, np.mean(state[1, :]), min(state[1, :]), np.std(state[1, :])))
+            logging.info(
+                "time=%6.1f (<= %4d) frame=%3.3E v=%f  vmin=%f  std=+-%f"
+                % (
+                    t,
+                    t_end,
+                    frame,
+                    np.mean(state[1, :]),
+                    min(state[1, :]),
+                    np.std(state[1, :]),
+                )
+            )
             T = t * np.ones(N_ped)
             output = np.vstack([ids, T, state]).transpose()
             np.savetxt(f, output, fmt="%d\t %7.3f\t %7.3f\t %7.3f")
@@ -97,7 +106,7 @@ def simulation(N, dt, t_end, state, once, f):
         if not flag:
             if once:
                 t = t_end - dt
-                print('t_end %f' % t_end)
+                print("t_end %f" % t_end)
                 if RK4:
                     logging.info("Solver:\t RK4")
                 elif EULER:  # Euler
@@ -118,7 +127,8 @@ if __name__ == "__main__":
     logging.basicConfig(
         filename=logfile,
         level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s')
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
 
     Dyn = float(Length) / N_ped
     # ============================
@@ -130,21 +140,23 @@ if __name__ == "__main__":
     # ------------------------ Files for data --------------------------------------
     prefix = "%d_av%.2f_v0%.2f" % (N_ped, av, v0)
     filename = "traj_" + prefix + ".txt"
-    f = open(filename, 'wb')
+    f = open(filename, "wb")
 
     #    write_geometry()
     logging.info("start initialisation with %d peds" % N_ped)
     state = init(N_ped, Length)
 
-    logging.info("simulation with v0=%.2f, av=%.2f,  dt=%.4f, rho=%.2f" % (v0, av, dt, rho))
+    logging.info(
+        "simulation with v0=%.2f, av=%.2f,  dt=%.4f, rho=%.2f" % (v0, av, dt, rho)
+    )
 
-    print('filename %s' % filename)
-    t1 = time.clock()
+    print("filename %s" % filename)
+    t1 = time.perf_counter()
     ######################################################
     simulation(N_ped, dt, t_end, state, once, f)
     ######################################################
     # a = anim.animate_solution(u, peds, targets)
-    t2 = time.clock()
+    t2 = time.perf_counter()
     logging.info("simulation time %.3f [s] (%.2f [min])" % ((t2 - t1), (t2 - t1) / 60))
 
     logging.info("close %s" % filename)
