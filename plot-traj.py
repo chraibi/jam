@@ -1,73 +1,76 @@
-#!/usr/bin/python
-import matplotlib
-
-matplotlib.use("macosx")
+"""Plotting script using matplotlib."""
 
 import matplotlib.pyplot as plt
-from sys import argv, exit
-import numpy as np
+import pandas as pd
+import sys
 
-try:
-    import pandas as pd
+# Check if a file argument is provided
+if len(sys.argv) < 2:
+    print(f"Usage: {sys.argv[0]} txt-trajectory filename")
+    sys.exit(1)
 
-    found_pandas = True
-except ImportError:
-    found_pandas = False
+# Constants
+MARKER_SIZE = 22
+TEXT_SIZE = 16
+LINE_WIDTH = 0.05
+LENGTH = 200  # Warning: this value should match the one used in model.py
 
+file_path = sys.argv[1]
+print(f"Loading file: {file_path}")
+data = pd.read_csv(
+    file_path, sep=r"\s+", header=None, names=["id", "time", "x", "v"], comment="#"
+)
+print("Finished loading")
 
-if len(argv) < 2:
-    print("Usage: %s filename" % argv[0])
-    exit(-1)
+ids = data["id"].unique()
 
-ms = 22  # int(argv[2])  #22
-mt = 16  # int(argv[3])  #16
-
-lw = 0.05
-file1 = argv[1]
-fig = plt.figure()
-ax = fig.add_subplot(1, 1, 1)
-print("found_pandas: %r" % found_pandas)
-print("loading file %s" % file1)
-if found_pandas:  # this is about 15 times faster than np.loadtxt()
-    A1 = np.array(pd.read_csv(file1, sep="\s+", header=None))
-else:
-    A1 = np.loadtxt(file1)
-
-print("finished loading")
-ids = np.unique(A1[:, 0]).astype(int)
-frames = A1[:, 1]
-Length = 200  # warning: this value should be the same as in model.py
-figname = file1.split(".txt")[0]
+fig, ax = plt.subplots()
+output_filename = file_path.replace(".txt", ".png")
 
 for i in ids[::2]:
-    p = A1[A1[:, 0] == i]
-    x1 = p[:, 1]  # time
-    y1 = np.fmod(p[:, 2], Length)  # x
-    abs_d_data = np.abs(np.diff(y1))
-    abs_mean = abs_d_data.mean()
-    abs_std = abs_d_data.std()
-    if abs_std <= 0.5 * abs_mean:
-        T = []
+    person_data = data[data["id"] == i]
+    time = person_data["time"]
+    position = person_data["x"] % LENGTH
+
+    abs_diff = position.diff().abs().dropna()
+    abs_mean = abs_diff.mean()
+    abs_std = abs_diff.std()
+
+    if abs_std > 0.5 * abs_mean:
+        change_points = abs_diff[abs_diff > abs_mean + 3 * abs_std].index
     else:
-        T = np.nonzero(abs_d_data > abs_mean + 3 * abs_std)[0]
+        change_points = []
 
-    start = 0
-    for t in T:
-        plt.plot(y1[start:t], x1[start:t], "k.", ms=lw, lw=lw, rasterized=True)
-        start = t + 1
+    start_idx = 0
+    for change_idx in change_points:
+        plt.plot(
+            position[start_idx:change_idx],
+            time[start_idx:change_idx],
+            "k.",
+            ms=LINE_WIDTH,
+            lw=LINE_WIDTH,
+            rasterized=True,
+        )
+        start_idx = change_idx + 1
 
-    plt.plot(y1[start:], x1[start:], "k.", ms=lw, lw=lw, rasterized=True)
+    # Plot remaining data
+    plt.plot(
+        position[start_idx:],
+        time[start_idx:],
+        "k.",
+        ms=LINE_WIDTH,
+        lw=LINE_WIDTH,
+        rasterized=True,
+    )
 
-plt.xlabel(r"$x_n$", size=ms)
-plt.ylabel(r"$t\; \rm{(s)}$", size=ms)
-plt.xticks(fontsize=mt)
-plt.yticks(fontsize=mt)
-fig.set_tight_layout(True)
 
-#
-for e in ["png"]:  # , "png", "eps"]:
-    fname = figname + "." + e
-    plt.savefig(fname)
-    print(">> figname: %s" % fname)
+plt.xlabel(r"$x_n$", fontsize=MARKER_SIZE)
+plt.ylabel(r"$t\; \rm{(s)}$", fontsize=MARKER_SIZE)
+plt.xticks(fontsize=TEXT_SIZE)
+plt.yticks(fontsize=TEXT_SIZE)
 
+fig.tight_layout()
+
+plt.savefig(output_filename)
+print(f"Figure saved as: {output_filename}")
 plt.show()
