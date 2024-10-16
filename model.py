@@ -1,34 +1,69 @@
-#!/usr/bin/python
-# -------------------------------------------------------------
-# from numpy import *
-# import os
+"""Model definition."""
+
+import numpy as np
 import logging
 import time
-from utils import *
+from utils import rk4, euler, heun, init
+from dataclasses import dataclass
+from typing import Callable, Tuple, IO
+from enum import Enum
 
-# ---------------------- Parameter ---------------------------------------
-fps = 8  # frames per second
-dt = 0.001  # [s] integrator step length
-t_end = 3000  # [s] integration time
-N_ped = 133  # number of pedestrians delta YN= 1.5
-Length = 200  # [m] length of corridor. *Closed boundary conditions*
-# ========================= SOLVER
-RK4 = 0  # 1 --> RK4.
-EULER = 1  # if RK4==0 and EULER==0 ---> Heun
-HEUN = 0
-once = 1
+
+@dataclass
+class SimulationParams:
+    """Parameter Dataclass."""
+
+    fps: int = 8  # frames per second
+    dt: float = 0.001  # [s] integrator step length
+    t_end: int = 3000  # [s] integration time
+    N_ped: int = 133  # number of pedestrians
+    Length: int = 200  # [m] length of corridor. *Closed boundary conditions*
+    v0: float = 1.0  # initial velocity
+    av: float = 0.0  # avoidance velocity factor
+    a0: float = 1.0  # minimum distance factor
+    tau: float = 1.0  # relaxation time
+
+
+# Once flag
+once = True
+
+
+class SolverType(Enum):
+    """Define solver types."""
+
+    RK4 = "RK4"
+    EULER = "EULER"
+    HEUN = "HEUN"
+
+
+params = SimulationParams()
+
+# Define the type for the solver
+Solver = Callable[[float, float, np.ndarray, Callable], Tuple[float, np.ndarray, int]]
+
+
+def select_solver(solver_type: SolverType) -> Solver:
+    """Select and return the solver function."""
+    if solver_type == SolverType.RK4:
+        return rk4
+    elif solver_type == SolverType.EULER:
+        return euler
+    elif solver_type == SolverType.HEUN:
+        return heun
+    else:
+        raise ValueError(f"Unknown solver type: {solver_type}")
+
+
 # ------------------------- logging ----------------------------------------
-rho = float(N_ped) / Length
 
 
-# ======================================================
-def get_state_vars(state):
-    """
-    state variables and dist
-    """
+def get_state_vars(
+    state: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+    """State variables and dist."""
     x_n = state[0, :]  # x_n
     x_m = np.roll(x_n, -1)  # x_{n+1}
-    x_m[-1] += Length  # the first one goes ahead by Length
+    x_m[-1] += params.Length  # the first one goes ahead by Length
     dx_n = state[1, :]  # dx_n
     dx_m = np.roll(dx_n, -1)  # dx_{n+1}
     dist = x_m - x_n
@@ -37,29 +72,45 @@ def get_state_vars(state):
     return x_n, x_m, dx_n, dx_m, dist
 
 
-# ======================================================
-def model(t, state):
-    """
-    log model
+def model(t: float, state: np.ndarray) -> Tuple[np.ndarray, int]:
+    """Calculate the state of the model at time t.
+
+    This function computes the new state of the pedestrians based on their current
+    positions and velocities, applying the model's driving and repulsive forces.
+    It checks for overlapping agents, returning a flag to indicate whether the
+    simulation can continue without issues.
+
+    Args:
+        t (float): The current time of the simulation.
+        state (np.ndarray): A 2D array where the first row contains the positions
+                            of the pedestrians and the second row contains their
+                            velocities.
+
+    Returns:
+        Tuple[np.ndarray, int]: A tuple where the first element is a 2D array
+                                representing the new state of the system (updated
+                                positions and velocities), and the second element
+                                is a flag indicating the status:
+                                - 1 if the update is valid (no overlaps detected),
+                                - 0 if overlaps occur (not valid).
     """
     x_n, x_m, dx_n, dx_m, dist = get_state_vars(state)
-    if (x_n != np.sort(x_n)).any():  # check if pedestrians are swaping positions
+    if (x_n != np.sort(x_n)).any():  # check if pedestrians are swapping positions
         swapping = x_n != np.sort(x_n)  # swapping is True if there is some swapping
-        swaped_dist = x_n[swapping]
-        swaped_ped = [i for i, v in enumerate(swapping) if v == True]
-
-        print("swaped_peds".format(swaped_ped))
-        print("distances ".format(swaped_dist))
+        swapped_dist = x_n[swapping]
+        swapped_ped = [i for i, v in enumerate(swapping) if v]
+        logging.info(f"Swapped agents: {swapped_ped}")
+        logging.info(f"Distances: {swapped_dist}")
         return state, 0
 
-    f_drv = (v0 - dx_n) / tau
+    f_drv = (params.v0 - dx_n) / params.tau
     c = np.e - 1
     Dxn = dist
-    Dmin = 2 * a0 + av * (dx_n + dx_m)
+    Dmin = 2 * params.a0 + params.av * (dx_n + dx_m)
     R = 1 - Dxn / Dmin
     eps = 0.01
     R = eps * np.log(1 + np.exp(R / eps))
-    f_rep = -v0 / tau * np.log(c * R + 1)
+    f_rep = -params.v0 / params.tau * np.log(c * R + 1)
     ########################
     a_n = f_rep + f_drv
     #######################
@@ -70,49 +121,58 @@ def model(t, state):
 
 
 # ======================================================
-def simulation(N, dt, t_end, state, once, f):
+def simulation(
+    N: int,
+    dt: float,
+    t_end: float,
+    state: np.ndarray,
+    once: int,
+    solver: Solver,
+    file_handler: IO,  # Type hint for a binary file-like object
+) -> None:
+    """Run the simulation of the model using the specified solver.
+
+    Parameters:
+    ----------
+    N : int
+        The number of pedestrians in the simulation.
+    dt : float
+        The time step for the simulation.
+    t_end : float
+        The end time for the simulation.
+    state : np.ndarray
+        The initial state of the pedestrians (position, velocity, etc.).
+    once : int
+        A flag indicating whether to run the simulation only once (not used in the current function).
+    solver : Solver
+        The solver function used for the simulation (e.g., RK4, Euler, Heun).
+    file_handler : IO
+        The file handler for writing simulation output.
+    """
     t = 0
     frame = 0
     iframe = 0
-    ids = np.arange(N_ped)
-    np.savetxt(f, [], header="id\t time\t x\t v")
+    ids = np.arange(N)
+    np.savetxt(file_handler, [], header="id\t time\t x\t v")
     while t <= t_end:
-        if frame % (1 / (dt * fps)) == 0:
+        if frame % (1 / (dt * params.fps)) == 0:
             logging.info(
-                "time=%6.1f (<= %4d) frame=%3.3E v=%f  vmin=%f  std=+-%f"
-                % (
-                    t,
-                    t_end,
-                    frame,
-                    np.mean(state[1, :]),
-                    min(state[1, :]),
-                    np.std(state[1, :]),
-                )
+                f"time={t:6.1f} (<= {t_end:4d}) frame={frame:.3E} v={np.mean(state[1, :]):.6f} "
+                f"vmin={min(state[1, :]):.6f} std=+-{np.std(state[1, :]):.6f}"
             )
-            T = t * np.ones(N_ped)
+            T = t * np.ones(N)
             output = np.vstack([ids, T, state]).transpose()
-            np.savetxt(f, output, fmt="%d\t %7.3f\t %7.3f\t %7.3f")
-            f.flush()
+            np.savetxt(file_handler, output, fmt="%d\t %7.3f\t %7.3f\t %7.3f")
+            file_handler.flush()
 
             iframe += 1
 
-        if RK4:  # Runge-Kutta
-            t, state, flag = rk4(t, dt, state, model)
-        elif EULER:  # Euler
-            t, state, flag = euler(t, dt, state, model)
-        elif HEUN:  # Heun
-            t, state, flag = heun(t, dt, state, model)
+        t, state, flag = solver(t, dt, state, model)
 
         if not flag:
             if once:
                 t = t_end - dt
-                print("t_end %f" % t_end)
-                if RK4:
-                    logging.info("Solver:\t RK4")
-                elif EULER:  # Euler
-                    logging.info("Solver:\t EULER")
-                else:
-                    logging.info("Solver:\t HEUN")
+                logging.info(f"t_end {t_end:.2f}")
                 once = 0
 
         frame += 1
@@ -130,34 +190,36 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    Dyn = float(Length) / N_ped
-    # ============================
-    av = 0.0
-    v0 = 1.0
-    a0 = 1.0
-    tau = 1.0
+    Dyn = float(params.Length) / params.N_ped
+    rho = float(params.N_ped) / params.Length
     # ============================
     # ------------------------ Files for data --------------------------------------
-    prefix = "%d_av%.2f_v0%.2f" % (N_ped, av, v0)
+    prefix = "%d_av%.2f_v0%.2f" % (params.N_ped, params.av, params.v0)
     filename = "traj_" + prefix + ".txt"
-    f = open(filename, "wb")
 
-    #    write_geometry()
-    logging.info("start initialisation with %d peds" % N_ped)
-    state = init(N_ped, Length)
+    with open(filename, "wb") as file_handler:
+        logging.info("Start initialization with %d peds" % params.N_ped)
+        state = init(params.N_ped, params.Length)
 
-    logging.info(
-        "simulation with v0=%.2f, av=%.2f,  dt=%.4f, rho=%.2f" % (v0, av, dt, rho)
-    )
+        logging.info(
+            "Simulation with v0=%.2f, av=%.2f,  dt=%.4f, rho=%.2f"
+            % (params.v0, params.av, params.dt, rho)
+        )
 
-    print("filename %s" % filename)
-    t1 = time.perf_counter()
-    ######################################################
-    simulation(N_ped, dt, t_end, state, once, f)
-    ######################################################
-    # a = anim.animate_solution(u, peds, targets)
-    t2 = time.perf_counter()
-    logging.info("simulation time %.3f [s] (%.2f [min])" % ((t2 - t1), (t2 - t1) / 60))
+        logging.info(f"filename: {filename}")
+        solver_type = SolverType.EULER
+        solver = select_solver(solver_type)
+        t1 = time.perf_counter()
 
-    logging.info("close %s" % filename)
-    f.close()
+        ######################################################
+        simulation(
+            params.N_ped, params.dt, params.t_end, state, once, solver, file_handler
+        )
+        ######################################################
+
+        t2 = time.perf_counter()
+        logging.info(
+            "simulation time %.3f [s] (%.2f [min])" % ((t2 - t1), (t2 - t1) / 60)
+        )
+
+        logging.info("close %s" % filename)
